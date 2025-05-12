@@ -1,17 +1,3 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
 import asyncio
 import base64
 import json
@@ -19,18 +5,14 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, Query, WebSocket
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from google.adk.agents import LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
-from google.genai.types import (
-    Blob,
-    Content,
-    Part,
-)
+from google.genai import types
 from google_search_agent.agent import root_agent
 
 #
@@ -63,7 +45,17 @@ def start_agent_session(session_id, is_audio=False):
 
     # Set response modality
     modality = "AUDIO" if is_audio else "TEXT"
-    run_config = RunConfig(response_modalities=[modality])
+
+    # Create speech config with voice settings
+    speech_config = types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            # Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, and Zephyr
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Kore")
+        )
+    )
+
+    # Create run config with basic settings
+    run_config = RunConfig(response_modalities=[modality], speech_config=speech_config)
 
     # Create a LiveRequestQueue for this session
     live_request_queue = LiveRequestQueue()
@@ -93,15 +85,17 @@ async def agent_to_client_messaging(websocket, live_events):
                 continue
 
             # Read the Content and its first Part
-            part: Part = (
+            part: types.Part = (
                 event.content and event.content.parts and event.content.parts[0]
             )
             if not part:
                 continue
 
             # If it's audio, send Base64 encoded audio data
-            is_audio = part.inline_data and part.inline_data.mime_type.startswith(
-                "audio/pcm"
+            is_audio = (
+                part.inline_data
+                and part.inline_data.mime_type
+                and part.inline_data.mime_type.startswith("audio/pcm")
             )
             if is_audio:
                 audio_data = part.inline_data and part.inline_data.data
@@ -133,14 +127,16 @@ async def client_to_agent_messaging(websocket, live_request_queue):
         # Send the message to the agent
         if mime_type == "text/plain":
             # Send a text message
-            content = Content(role="user", parts=[Part.from_text(text=data)])
+            content = types.Content(
+                role="user", parts=[types.Part.from_text(text=data)]
+            )
             live_request_queue.send_content(content=content)
             print(f"[CLIENT TO AGENT]: {data}")
         elif mime_type == "audio/pcm":
             # Send an audio data
             decoded_data = base64.b64decode(data)
             live_request_queue.send_realtime(
-                Blob(data=decoded_data, mime_type=mime_type)
+                types.Blob(data=decoded_data, mime_type=mime_type)
             )
         else:
             raise ValueError(f"Mime type not supported: {mime_type}")
@@ -163,7 +159,11 @@ async def root():
 
 
 @app.websocket("/ws/{session_id}")
-async def websocket_endpoint(websocket: WebSocket, session_id: int, is_audio: str):
+async def websocket_endpoint(
+    websocket: WebSocket,
+    session_id: str,
+    is_audio: str = Query(...),
+):
     """Client websocket endpoint"""
 
     # Wait for client connection
@@ -171,7 +171,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int, is_audio: st
     print(f"Client #{session_id} connected, audio mode: {is_audio}")
 
     # Start agent session
-    session_id = str(session_id)
     live_events, live_request_queue = start_agent_session(
         session_id, is_audio == "true"
     )

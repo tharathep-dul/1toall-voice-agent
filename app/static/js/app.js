@@ -1,20 +1,4 @@
 /**
- * Copyright 2025 Google LLC
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
-/**
  * app.js: JS code for the adk-streaming sample app.
  */
 
@@ -22,7 +6,7 @@
  * WebSocket handling
  */
 
-// Connect the server with a WebSocket connection
+// Global variables
 const sessionId = Math.random().toString().substring(10);
 const ws_url = "ws://" + window.location.host + "/ws/" + sessionId;
 let websocket = null;
@@ -32,18 +16,26 @@ let is_audio = false;
 const messageForm = document.getElementById("messageForm");
 const messageInput = document.getElementById("message");
 const messagesDiv = document.getElementById("messages");
+const statusDot = document.getElementById("status-dot");
+const connectionStatus = document.getElementById("connection-status");
+const typingIndicator = document.getElementById("typing-indicator");
+const startAudioButton = document.getElementById("startAudioButton");
+const stopAudioButton = document.getElementById("stopAudioButton");
+const recordingContainer = document.getElementById("recording-container");
 let currentMessageId = null;
 
 // WebSocket handlers
 function connectWebsocket() {
   // Connect websocket
-  websocket = new WebSocket(ws_url + "?is_audio=" + is_audio);
+  const wsUrl = ws_url + "?is_audio=" + is_audio;
+  websocket = new WebSocket(wsUrl);
 
   // Handle connection open
   websocket.onopen = function () {
     // Connection opened messages
     console.log("WebSocket connection opened.");
-    document.getElementById("messages").textContent = "Connection opened";
+    connectionStatus.textContent = "Connected";
+    statusDot.classList.add("connected");
 
     // Enable the Send button
     document.getElementById("sendButton").disabled = false;
@@ -56,6 +48,11 @@ function connectWebsocket() {
     const message_from_server = JSON.parse(event.data);
     console.log("[AGENT TO CLIENT] ", message_from_server);
 
+    // Show typing indicator when response starts
+    if (!currentMessageId && !message_from_server.turn_complete) {
+      typingIndicator.classList.add("visible");
+    }
+
     // Check if the turn is complete
     // if turn complete, add new message
     if (
@@ -63,6 +60,7 @@ function connectWebsocket() {
       message_from_server.turn_complete == true
     ) {
       currentMessageId = null;
+      typingIndicator.classList.remove("visible");
       return;
     }
 
@@ -73,11 +71,15 @@ function connectWebsocket() {
 
     // If it's a text, print it
     if (message_from_server.mime_type == "text/plain") {
+      // Hide typing indicator when we start receiving text
+      typingIndicator.classList.remove("visible");
+
       // add a new message for a new turn
       if (currentMessageId == null) {
         currentMessageId = Math.random().toString(36).substring(7);
         const message = document.createElement("p");
         message.id = currentMessageId;
+        message.className = "agent-message";
         // Append the message element to the messagesDiv
         messagesDiv.appendChild(message);
       }
@@ -95,7 +97,9 @@ function connectWebsocket() {
   websocket.onclose = function () {
     console.log("WebSocket connection closed.");
     document.getElementById("sendButton").disabled = true;
-    document.getElementById("messages").textContent = "Connection closed";
+    connectionStatus.textContent = "Disconnected. Reconnecting...";
+    statusDot.classList.remove("connected");
+    typingIndicator.classList.remove("visible");
     setTimeout(function () {
       console.log("Reconnecting...");
       connectWebsocket();
@@ -104,6 +108,9 @@ function connectWebsocket() {
 
   websocket.onerror = function (e) {
     console.log("WebSocket error: ", e);
+    connectionStatus.textContent = "Connection error";
+    statusDot.classList.remove("connected");
+    typingIndicator.classList.remove("visible");
   };
 }
 connectWebsocket();
@@ -115,14 +122,21 @@ function addSubmitHandler() {
     const message = messageInput.value;
     if (message) {
       const p = document.createElement("p");
-      p.textContent = "> " + message;
+      p.textContent = message;
+      p.className = "user-message";
       messagesDiv.appendChild(p);
       messageInput.value = "";
+
+      // Show typing indicator after sending message
+      typingIndicator.classList.add("visible");
+
       sendMessage({
         mime_type: "text/plain",
         data: message,
       });
       console.log("[CLIENT TO AGENT] " + message);
+      // Scroll down to the bottom of the messagesDiv
+      messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
     return false;
   };
@@ -156,6 +170,7 @@ let audioPlayerContext;
 let audioRecorderNode;
 let audioRecorderContext;
 let micStream;
+let isRecording = false;
 
 // Import the audio worklets
 import { startAudioPlayerWorklet } from "./audio-player.js";
@@ -174,28 +189,81 @@ function startAudio() {
       audioRecorderNode = node;
       audioRecorderContext = ctx;
       micStream = stream;
+      isRecording = true;
     }
   );
 }
 
+// Stop audio recording
+function stopAudio() {
+  if (audioRecorderNode) {
+    audioRecorderNode.disconnect();
+    audioRecorderNode = null;
+  }
+
+  if (audioRecorderContext) {
+    audioRecorderContext
+      .close()
+      .catch((err) => console.error("Error closing audio context:", err));
+    audioRecorderContext = null;
+  }
+
+  if (micStream) {
+    micStream.getTracks().forEach((track) => track.stop());
+    micStream = null;
+  }
+
+  isRecording = false;
+}
+
 // Start the audio only when the user clicked the button
 // (due to the gesture requirement for the Web Audio API)
-const startAudioButton = document.getElementById("startAudioButton");
 startAudioButton.addEventListener("click", () => {
   startAudioButton.disabled = true;
+  startAudioButton.textContent = "Voice Enabled";
+  startAudioButton.style.display = "none";
+  stopAudioButton.style.display = "inline-block";
+  recordingContainer.style.display = "flex";
   startAudio();
   is_audio = true;
   connectWebsocket(); // reconnect with the audio mode
 });
 
+// Stop audio recording when stop button is clicked
+stopAudioButton.addEventListener("click", () => {
+  stopAudio();
+  stopAudioButton.style.display = "none";
+  startAudioButton.style.display = "inline-block";
+  startAudioButton.disabled = false;
+  startAudioButton.textContent = "Enable Voice";
+  recordingContainer.style.display = "none";
+
+  // Reconnect without audio mode
+  is_audio = false;
+
+  // Only reconnect if the connection is still open
+  if (websocket && websocket.readyState === WebSocket.OPEN) {
+    websocket.close();
+    // The onclose handler will trigger reconnection
+  }
+});
+
 // Audio recorder handler
 function audioRecorderHandler(pcmData) {
+  // Only send data if we're still recording
+  if (!isRecording) return;
+
   // Send the pcm data as base64
   sendMessage({
     mime_type: "audio/pcm",
     data: arrayBufferToBase64(pcmData),
   });
-  console.log("[CLIENT TO AGENT] sent %s bytes", pcmData.byteLength);
+
+  // Log every few samples to avoid flooding the console
+  if (Math.random() < 0.01) {
+    // Only log ~1% of audio chunks
+    console.log("[CLIENT TO AGENT] sent audio data");
+  }
 }
 
 // Encode an array buffer with Base64
