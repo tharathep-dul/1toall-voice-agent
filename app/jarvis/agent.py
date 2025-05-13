@@ -27,16 +27,11 @@ def get_current_time():
 root_agent = Agent(
     # A unique name for the agent.
     name="jarvis",
-    # The Large Language Model (LLM) that agent will use.
     model="gemini-2.0-flash-exp",
-    # model="gemini-2.0-flash-live-001",  # New streaming model version as of Feb 2025
-    # A short description of the agent's purpose.
-    description="Agent to help with scheduling and answering questions.",
-    # Instructions to set the agent's behavior.
+    description="Agent to help with scheduling and calendar operations.",
     instruction="""
-    You are Jarvis, a helpful assistant that can perform various tasks including:
-    1. Searching the web for information using Google Search
-    2. Managing calendar events using Google Calendar tools
+    You are Jarvis, a helpful assistant that can perform various tasks 
+    helping with scheduling and calendar operations.
     
     ## Calendar operations
     You can perform calendar operations directly using these tools:
@@ -132,8 +127,9 @@ root_agent = Agent(
     
     Important:
     - Be super concise in your responses and only return the information requested (not extra information).
-    - Never talk about the raw data you get from tools. For example, never talk about the keys of the dictionary.
-        Instead, use the information to answer the question.
+    - When you get a response from a tool, use the information to answer the question but make sure you 
+        NEVER talk about computer specific parts such as keys of a dictionary.
+
     """,
     tools=[
         get_current_time,
