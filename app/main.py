@@ -3,6 +3,7 @@ import base64
 import json
 import os
 from pathlib import Path
+from typing import AsyncIterable
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query, WebSocket
@@ -10,6 +11,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from google.adk.agents import LiveRequestQueue
 from google.adk.agents.run_config import RunConfig
+from google.adk.events.event import Event
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
@@ -55,7 +57,14 @@ def start_agent_session(session_id, is_audio=False):
     )
 
     # Create run config with basic settings
-    run_config = RunConfig(response_modalities=[modality], speech_config=speech_config)
+    config = {"response_modalities": [modality], "speech_config": speech_config}
+
+    # Add output_audio_transcription when audio is enabled to get both audio and text
+    if is_audio:
+        config["output_audio_transcription"] = {}
+        config["input_audio_transcription"] = {}
+
+    run_config = RunConfig(**config)
 
     # Create a LiveRequestQueue for this session
     live_request_queue = LiveRequestQueue()
@@ -69,10 +78,14 @@ def start_agent_session(session_id, is_audio=False):
     return live_events, live_request_queue
 
 
-async def agent_to_client_messaging(websocket, live_events):
+async def agent_to_client_messaging(
+    websocket: WebSocket, live_events: AsyncIterable[Event | None]
+):
     """Agent to client communication"""
     while True:
         async for event in live_events:
+            if event is None:
+                continue
 
             # If the turn complete or interrupted, send it
             if event.turn_complete or event.interrupted:
@@ -85,10 +98,12 @@ async def agent_to_client_messaging(websocket, live_events):
                 continue
 
             # Read the Content and its first Part
-            part: types.Part = (
-                event.content and event.content.parts and event.content.parts[0]
-            )
+            part = event.content and event.content.parts and event.content.parts[0]
             if not part:
+                continue
+
+            # Make sure we have a valid Part
+            if not isinstance(part, types.Part):
                 continue
 
             # If it's audio, send Base64 encoded audio data
@@ -108,14 +123,16 @@ async def agent_to_client_messaging(websocket, live_events):
                     print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
                     continue
 
-            # If it's text and a parial text, send it
-            if part.text and event.partial:
+            # If it's text, send it
+            if part.text:
                 message = {"mime_type": "text/plain", "data": part.text}
                 await websocket.send_text(json.dumps(message))
                 print(f"[AGENT TO CLIENT]: text/plain: {message}")
 
 
-async def client_to_agent_messaging(websocket, live_request_queue):
+async def client_to_agent_messaging(
+    websocket: WebSocket, live_request_queue: LiveRequestQueue
+):
     """Client to agent communication"""
     while True:
         # Decode JSON message
@@ -133,11 +150,17 @@ async def client_to_agent_messaging(websocket, live_request_queue):
             live_request_queue.send_content(content=content)
             print(f"[CLIENT TO AGENT]: {data}")
         elif mime_type == "audio/pcm":
-            # Send an audio data
+            # Send audio data
             decoded_data = base64.b64decode(data)
+
+            # Send the audio data - note that ActivityStart/End and transcription
+            # handling is done automatically by the ADK when input_audio_transcription
+            # is enabled in the config
             live_request_queue.send_realtime(
                 types.Blob(data=decoded_data, mime_type=mime_type)
             )
+            print(f"[CLIENT TO AGENT]: audio/pcm: {len(decoded_data)} bytes")
+
         else:
             raise ValueError(f"Mime type not supported: {mime_type}")
 

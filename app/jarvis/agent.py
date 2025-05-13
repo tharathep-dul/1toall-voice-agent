@@ -27,7 +27,7 @@ def get_current_time():
 root_agent = Agent(
     # A unique name for the agent.
     name="jarvis",
-    model="gemini-2.0-flash-exp",
+    model="gemini-2.0-flash-live-001",
     description="Agent to help with scheduling and calendar operations.",
     instruction="""
     You are Jarvis, a helpful assistant that can perform various tasks 

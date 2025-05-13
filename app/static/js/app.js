@@ -64,9 +64,20 @@ function connectWebsocket() {
       return;
     }
 
-    // If it's audio, play it
+    // If it's audio, play it (but don't remove the text that might be displayed)
     if (message_from_server.mime_type == "audio/pcm" && audioPlayerNode) {
       audioPlayerNode.port.postMessage(base64ToArray(message_from_server.data));
+
+      // If we have audio and a text message already being displayed, mark it with an audio icon if not already done
+      if (currentMessageId && is_audio) {
+        const message = document.getElementById(currentMessageId);
+        if (message && !message.querySelector(".audio-icon")) {
+          // Add audio icon to the message
+          const audioIcon = document.createElement("span");
+          audioIcon.className = "audio-icon";
+          message.prepend(audioIcon);
+        }
+      }
     }
 
     // If it's a text, print it
@@ -80,13 +91,33 @@ function connectWebsocket() {
         const message = document.createElement("p");
         message.id = currentMessageId;
         message.className = "agent-message";
+
+        // If audio is enabled, add the audio icon
+        if (is_audio) {
+          const audioIcon = document.createElement("span");
+          audioIcon.className = "audio-icon";
+          message.appendChild(audioIcon);
+        }
+
         // Append the message element to the messagesDiv
         messagesDiv.appendChild(message);
       }
 
       // Add message text to the existing message element
       const message = document.getElementById(currentMessageId);
-      message.textContent += message_from_server.data;
+
+      // Get the text node or create one if it doesn't exist
+      let textNode = Array.from(message.childNodes).find(
+        (node) => node.nodeType === Node.TEXT_NODE
+      );
+      if (!textNode) {
+        textNode = document.createTextNode("");
+        message.appendChild(textNode);
+      }
+
+      // Update the text
+      textNode.nodeValue =
+        (textNode.nodeValue || "") + message_from_server.data;
 
       // Scroll down to the bottom of the messagesDiv
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -226,6 +257,10 @@ startAudioButton.addEventListener("click", () => {
   recordingContainer.style.display = "flex";
   startAudio();
   is_audio = true;
+
+  // Add class to messages container to enable audio styling
+  messagesDiv.classList.add("audio-enabled");
+
   connectWebsocket(); // reconnect with the audio mode
 });
 
@@ -237,6 +272,9 @@ stopAudioButton.addEventListener("click", () => {
   startAudioButton.disabled = false;
   startAudioButton.textContent = "Enable Voice";
   recordingContainer.style.display = "none";
+
+  // Remove audio styling class
+  messagesDiv.classList.remove("audio-enabled");
 
   // Reconnect without audio mode
   is_audio = false;
