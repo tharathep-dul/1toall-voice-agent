@@ -1,10 +1,10 @@
 """
-Tool for finding free time slots in Google Calendar.
+Find free time tool for Google Calendar integration.
 """
 
 import datetime
 
-from ..utils import get_calendar_service, parse_datetime
+from .calendar_utils import get_calendar_service, parse_datetime
 
 
 def find_free_time(
@@ -155,13 +155,13 @@ def find_free_time(
 
         return {
             "status": "success",
-            "message": f"Found {len(free_slots)} available time slots",
+            "message": f"Found {len(free_slots)} available time slot(s).",
             "free_slots": free_slots,
         }
 
     except Exception as e:
         return {
             "status": "error",
-            "message": f"Error finding free time slots: {str(e)}",
+            "message": f"Error finding free time: {str(e)}",
             "free_slots": [],
         }

@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import os
+import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -13,7 +14,15 @@ from google.adk.agents.run_config import RunConfig
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
-from jarvis.agent import root_agent
+from jarvis.tools.calendar_tools import (
+    create_event,
+    delete_event,
+    find_free_time,
+    list_calendars,
+    list_events,
+)
+
+from app.jarvis.agent import root_agent
 
 #
 # ADK Streaming
@@ -69,7 +78,7 @@ def start_agent_session(session_id, is_audio=False):
     return live_events, live_request_queue
 
 
-async def agent_to_client_messaging(websocket, live_events):
+async def agent_to_client_messaging(websocket, live_events, live_request_queue):
     """Agent to client communication"""
     while True:
         async for event in live_events:
@@ -82,6 +91,142 @@ async def agent_to_client_messaging(websocket, live_events):
                 }
                 await websocket.send_text(json.dumps(message))
                 print(f"[AGENT TO CLIENT]: {message}")
+                continue
+
+            print("[AGENT TO CLIENT EVENT]:", event)
+            print("[AGENT TO CLIENT EVENT TYPE]:", type(event))
+
+            # Handle function calls - first check if there are tool_calls directly on the event
+            tool_calls = getattr(event, "tool_calls", None)
+            print("[TOOL_CALLS]:", tool_calls)
+
+            # If no tool_calls directly, check for function_call in the content parts
+            if not tool_calls and hasattr(event, "content") and event.content:
+                for part in event.content.parts:
+                    function_call = getattr(part, "function_call", None)
+                    if function_call:
+                        print("[FUNCTION_CALL IN CONTENT]:", function_call)
+                        tool_calls = [function_call]
+                        break
+
+            # Process any tool calls we found
+            if tool_calls:
+                print(f"[FOUND TOOL CALLS]: {tool_calls}")
+                function_responses = []
+
+                for tool_call in tool_calls:
+                    print("[PROCESSING TOOL CALL]:", tool_call)
+                    try:
+                        # Extract information as safely as possible
+                        # First try direct attribute access
+                        func_name = getattr(tool_call, "name", None)
+                        func_args = getattr(tool_call, "args", None)
+                        func_id = getattr(tool_call, "id", None)
+
+                        # If we have a nested function_call object, use that instead
+                        if hasattr(tool_call, "function_call"):
+                            print("[NESTED FUNCTION_CALL FOUND]")
+                            func_name = getattr(
+                                tool_call.function_call, "name", func_name
+                            )
+                            func_args = getattr(
+                                tool_call.function_call, "args", func_args
+                            )
+                            func_id = getattr(tool_call.function_call, "id", func_id)
+
+                        # Fallbacks if we couldn't get the values
+                        if func_name is None:
+                            # Try dictionary-style access
+                            try:
+                                func_name = tool_call.get("name", "unknown_function")
+                            except:
+                                func_name = "unknown_function"
+
+                        if func_args is None:
+                            # Try dictionary-style access
+                            try:
+                                func_args = tool_call.get("args", {})
+                            except:
+                                func_args = {}
+
+                        if func_id is None:
+                            # Try dictionary-style access
+                            try:
+                                func_id = tool_call.get("id", "unknown_id")
+                            except:
+                                func_id = "unknown_id"
+
+                        print(
+                            f"[EXTRACTED FUNCTION]: name={func_name}, id={func_id}, args={func_args}"
+                        )
+
+                        # Process args - ensure it's a dictionary
+                        if isinstance(func_args, str):
+                            try:
+                                func_args = json.loads(func_args)
+                            except:
+                                print(
+                                    f"[WARNING] Failed to parse args string: {func_args}"
+                                )
+                                func_args = {}
+
+                        if not isinstance(func_args, dict):
+                            print(f"[WARNING] Args is not a dict: {type(func_args)}")
+                            func_args = {}
+
+                        # Map function names to actual functions
+                        tools_map = {
+                            "list_calendars": list_calendars,
+                            "list_events": list_events,
+                            "create_event": create_event,
+                            "delete_event": delete_event,
+                            "find_free_time": find_free_time,
+                        }
+
+                        # Execute the function if it exists in our tools map
+                        if func_name in tools_map:
+                            try:
+                                print(f"[EXECUTING]: {func_name}({func_args})")
+                                result = tools_map[func_name](**func_args)
+                                print(f"[RESULT]: {result}")
+
+                                # Create function response
+                                function_response = types.FunctionResponse(
+                                    id=func_id, name=func_name, response=result
+                                )
+                                function_responses.append(function_response)
+                            except Exception as e:
+                                print(f"[ERROR] Function execution failed: {str(e)}")
+                                print(traceback.format_exc())
+
+                                # Create error response
+                                function_response = types.FunctionResponse(
+                                    id=func_id,
+                                    name=func_name,
+                                    response={
+                                        "status": "error",
+                                        "message": f"Error: {str(e)}",
+                                    },
+                                )
+                                function_responses.append(function_response)
+                        else:
+                            print(f"[ERROR] Unknown function: {func_name}")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to process tool call: {str(e)}")
+                        print(traceback.format_exc())
+
+                # Send function responses if we have any
+                if function_responses:
+                    try:
+                        print(f"[SENDING RESPONSES]: {function_responses}")
+                        live_request_queue.send_tool_response(
+                            function_responses=function_responses
+                        )
+                        print("[RESPONSES SENT SUCCESSFULLY]")
+                    except Exception as e:
+                        print(f"[ERROR] Failed to send responses: {str(e)}")
+                        print(traceback.format_exc())
+
                 continue
 
             # Read the Content and its first Part
@@ -177,7 +322,7 @@ async def websocket_endpoint(
 
     # Start tasks
     agent_to_client_task = asyncio.create_task(
-        agent_to_client_messaging(websocket, live_events)
+        agent_to_client_messaging(websocket, live_events, live_request_queue)
     )
     client_to_agent_task = asyncio.create_task(
         client_to_agent_messaging(websocket, live_request_queue)

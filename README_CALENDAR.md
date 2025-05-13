@@ -93,3 +93,6 @@ Google Calendar API has usage quotas. If you hit quota limits:
 - The OAuth token is stored securely in your user directory
 - Never share your `credentials.json` file or the generated token
 - The application only requests the minimum permissions needed for calendar operations 
+
+
+uvicorn main:app --reload

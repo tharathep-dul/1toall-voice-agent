@@ -1,8 +1,8 @@
 """
-Tool for deleting events from Google Calendar.
+Delete event tool for Google Calendar integration.
 """
 
-from ..utils import get_calendar_service
+from .calendar_utils import get_calendar_service
 
 
 def delete_event(

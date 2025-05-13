@@ -1,8 +1,8 @@
 """
-Tool for listing available calendars the user has access to.
+List calendars tool for Google Calendar integration.
 """
 
-from ..utils import get_calendar_service
+from .calendar_utils import get_calendar_service
 
 
 def list_calendars() -> dict:
@@ -14,7 +14,9 @@ def list_calendars() -> dict:
     """
     try:
         # Get calendar service
+        print("Getting calendar service")
         service = get_calendar_service()
+        print("Calendar service:", service)
         if not service:
             return {
                 "status": "error",
@@ -45,6 +47,7 @@ def list_calendars() -> dict:
                 "color": calendar.get("backgroundColor", "#FFFFFF"),
             }
             formatted_calendars.append(formatted_calendar)
+            break
 
         return {
             "status": "success",
