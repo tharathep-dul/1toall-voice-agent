@@ -13,7 +13,6 @@ def find_free_time(
     duration_minutes: int,
     working_hours_start: int,
     working_hours_end: int,
-    calendar_id: str,
 ) -> dict:
     """
     Find available time slots in the calendar.
@@ -24,7 +23,6 @@ def find_free_time(
         duration_minutes (int): Desired meeting length in minutes
         working_hours_start (int): Start of working hours, 24h format (e.g., 9 = 9 AM)
         working_hours_end (int): End of working hours, 24h format (e.g., 17 = 5 PM)
-        calendar_id (str): ID of the calendar to use (use 'primary' for default calendar)
 
     Returns:
         dict: List of available time slots or error details
@@ -38,6 +36,9 @@ def find_free_time(
                 "message": "Failed to authenticate with Google Calendar. Please check credentials.",
                 "free_slots": [],
             }
+
+        # Always use primary calendar
+        calendar_id = "primary"
 
         # Parse dates
         start_dt = parse_datetime(start_date)

@@ -8,7 +8,6 @@ from .create_event import create_event
 from .delete_event import delete_event
 from .edit_event import edit_event
 from .find_free_time import find_free_time
-from .list_calendars import list_calendars
 from .list_events import list_events
 
 __all__ = [
@@ -16,6 +15,5 @@ __all__ = [
     "delete_event",
     "edit_event",
     "find_free_time",
-    "list_calendars",
     "list_events",
 ]

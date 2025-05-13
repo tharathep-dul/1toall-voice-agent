@@ -8,7 +8,6 @@ from .calendar_utils import get_calendar_service
 def delete_event(
     event_id: str,
     confirm: bool,
-    calendar_id: str,
 ) -> dict:
     """
     Delete an event from Google Calendar.
@@ -16,7 +15,6 @@ def delete_event(
     Args:
         event_id (str): The unique ID of the event to delete
         confirm (bool): Confirmation flag (must be set to True to delete)
-        calendar_id (str): ID of the calendar containing the event (use 'primary' for default calendar)
 
     Returns:
         dict: Operation status and details
@@ -36,6 +34,9 @@ def delete_event(
                 "status": "error",
                 "message": "Failed to authenticate with Google Calendar. Please check credentials.",
             }
+
+        # Always use primary calendar
+        calendar_id = "primary"
 
         # Call the Calendar API to delete the event
         service.events().delete(calendarId=calendar_id, eventId=event_id).execute()

@@ -7,7 +7,6 @@ from .calendar_utils import get_calendar_service, parse_datetime
 
 def edit_event(
     event_id: str,
-    calendar_id: str,
     summary: str,
     start_time: str,
     end_time: str,
@@ -17,7 +16,6 @@ def edit_event(
 
     Args:
         event_id (str): The ID of the event to edit
-        calendar_id (str): ID of the calendar containing the event
         summary (str): New title/summary for the event (pass empty string to keep unchanged)
         start_time (str): New start time (e.g., "2023-12-31 14:00", pass empty string to keep unchanged)
         end_time (str): New end time (e.g., "2023-12-31 15:00", pass empty string to keep unchanged)
@@ -34,6 +32,9 @@ def edit_event(
                 "message": "Failed to authenticate with Google Calendar. Please check credentials.",
             }
 
+        # Always use primary calendar
+        calendar_id = "primary"
+
         # First get the existing event
         try:
             event = (
@@ -42,7 +43,7 @@ def edit_event(
         except Exception:
             return {
                 "status": "error",
-                "message": f"Event with ID {event_id} not found in calendar {calendar_id}.",
+                "message": f"Event with ID {event_id} not found in primary calendar.",
             }
 
         # Update the event with new values

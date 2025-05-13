@@ -11,6 +11,7 @@ const sessionId = Math.random().toString().substring(10);
 const ws_url = "ws://" + window.location.host + "/ws/" + sessionId;
 let websocket = null;
 let is_audio = false;
+let currentMessageId = null; // Track the current message ID during a conversation turn
 
 // Get DOM elements
 const messageForm = document.getElementById("messageForm");
@@ -72,16 +73,17 @@ function connectWebsocket() {
     if (message_from_server.mime_type === "audio/pcm" && audioPlayerNode) {
       audioPlayerNode.port.postMessage(base64ToArray(message_from_server.data));
 
-      // Mark the last model message with audio icon if it doesn't have one
-      const modelMessages = Array.from(
-        messagesDiv.querySelectorAll(".agent-message")
-      );
-      if (modelMessages.length > 0) {
-        const lastModelMessage = modelMessages[modelMessages.length - 1];
-        if (!lastModelMessage.querySelector(".audio-icon") && is_audio) {
+      // If we have an existing message element for this turn, add audio icon if needed
+      if (currentMessageId) {
+        const messageElem = document.getElementById(currentMessageId);
+        if (
+          messageElem &&
+          !messageElem.querySelector(".audio-icon") &&
+          is_audio
+        ) {
           const audioIcon = document.createElement("span");
           audioIcon.className = "audio-icon";
-          lastModelMessage.prepend(audioIcon);
+          messageElem.prepend(audioIcon);
         }
       }
     }
@@ -91,13 +93,29 @@ function connectWebsocket() {
       // Hide typing indicator
       typingIndicator.classList.remove("visible");
 
-      // Always create a new message element for each text message
+      const role = message_from_server.role || "model";
+
+      // If we already have a message element for this turn, append to it
+      if (currentMessageId && role === "model") {
+        const existingMessage = document.getElementById(currentMessageId);
+        if (existingMessage) {
+          // Append the text without adding extra spaces
+          // Use a span element to maintain proper text flow
+          const textNode = document.createTextNode(message_from_server.data);
+          existingMessage.appendChild(textNode);
+
+          // Scroll to the bottom
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+          return;
+        }
+      }
+
+      // Create a new message element if it's a new turn or user message
       const messageId = Math.random().toString(36).substring(7);
       const messageElem = document.createElement("p");
       messageElem.id = messageId;
 
       // Set class based on role
-      const role = message_from_server.role || "model";
       messageElem.className =
         role === "user" ? "user-message" : "agent-message";
 
@@ -115,6 +133,11 @@ function connectWebsocket() {
 
       // Add the message to the DOM
       messagesDiv.appendChild(messageElem);
+
+      // Remember the ID of this message for subsequent responses in this turn
+      if (role === "model") {
+        currentMessageId = messageId;
+      }
 
       // Scroll to the bottom
       messagesDiv.scrollTop = messagesDiv.scrollHeight;

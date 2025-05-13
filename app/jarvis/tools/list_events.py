@@ -10,22 +10,21 @@ from .calendar_utils import format_event_time, get_calendar_service
 def list_events(
     start_date: str,
     days: int,
-    max_results: int,
-    calendar_id: str,
 ) -> dict:
     """
     List upcoming calendar events within a specified date range.
 
     Args:
-        start_date (str): Start date in YYYY-MM-DD format. If empty, defaults to today.
-        days (int): Number of days to look ahead.
-        max_results (int): Maximum number of events to return (hardcoded to 100 internally).
-        calendar_id (str): ID of the calendar to use (use 'primary' for default calendar).
+        start_date (str): Start date in YYYY-MM-DD format. If empty string, defaults to today.
+        days (int): Number of days to look ahead. Use 1 for today only, 7 for a week, 30 for a month, etc.
 
     Returns:
         dict: Information about upcoming events or error details
     """
     try:
+        print("Listing events")
+        print("Start date: ", start_date)
+        print("Days: ", days)
         # Get calendar service
         service = get_calendar_service()
         if not service:
@@ -38,33 +37,8 @@ def list_events(
         # Always use a large max_results value to return all events
         max_results = 100
 
-        # Check if we need to lookup calendar_id (if only one calendar exists)
-        if (
-            calendar_id != "primary"
-            and "," not in calendar_id
-            and not calendar_id.endswith(".com")
-        ):
-            # This might be a calendar name instead of ID, try to find matching calendar
-            try:
-                from .list_calendars import list_calendars
-
-                calendars_result = list_calendars()
-                if (
-                    calendars_result["status"] == "success"
-                    and calendars_result["calendars"]
-                ):
-                    # If only one calendar exists, use that one
-                    if len(calendars_result["calendars"]) == 1:
-                        calendar_id = calendars_result["calendars"][0]["id"]
-                    else:
-                        # Look for a calendar with a matching name
-                        for cal in calendars_result["calendars"]:
-                            if calendar_id.lower() in cal["summary"].lower():
-                                calendar_id = cal["id"]
-                                break
-            except Exception as e:
-                print(f"Error looking up calendar: {str(e)}")
-                # Continue with the original calendar_id
+        # Always use primary calendar
+        calendar_id = "primary"
 
         # Set time range
         if not start_date or start_date.strip() == "":

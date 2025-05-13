@@ -11,7 +11,6 @@ def create_event(
     summary: str,
     start_time: str,
     end_time: str,
-    calendar_id: str,
 ) -> dict:
     """
     Create a new event in Google Calendar.
@@ -20,7 +19,6 @@ def create_event(
         summary (str): Event title/summary
         start_time (str): Start time (e.g., "2023-12-31 14:00")
         end_time (str): End time (e.g., "2023-12-31 15:00")
-        calendar_id (str): ID of the calendar to use
 
     Returns:
         dict: Information about the created event or error details
@@ -33,6 +31,9 @@ def create_event(
                 "status": "error",
                 "message": "Failed to authenticate with Google Calendar. Please check credentials.",
             }
+
+        # Always use primary calendar
+        calendar_id = "primary"
 
         # Parse times
         start_dt = parse_datetime(start_time)
