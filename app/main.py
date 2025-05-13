@@ -62,7 +62,6 @@ def start_agent_session(session_id, is_audio=False):
     # Add output_audio_transcription when audio is enabled to get both audio and text
     if is_audio:
         config["output_audio_transcription"] = {}
-        config["input_audio_transcription"] = {}
 
     run_config = RunConfig(**config)
 
@@ -106,6 +105,17 @@ async def agent_to_client_messaging(
             if not isinstance(part, types.Part):
                 continue
 
+            # Only send text if it's a partial response (streaming)
+            # Skip the final complete message to avoid duplication
+            if part.text and event.partial:
+                message = {
+                    "mime_type": "text/plain",
+                    "data": part.text,
+                    "role": "model",
+                }
+                await websocket.send_text(json.dumps(message))
+                print(f"[AGENT TO CLIENT]: text/plain: {part.text}")
+
             # If it's audio, send Base64 encoded audio data
             is_audio = (
                 part.inline_data
@@ -118,16 +128,10 @@ async def agent_to_client_messaging(
                     message = {
                         "mime_type": "audio/pcm",
                         "data": base64.b64encode(audio_data).decode("ascii"),
+                        "role": "model",
                     }
                     await websocket.send_text(json.dumps(message))
                     print(f"[AGENT TO CLIENT]: audio/pcm: {len(audio_data)} bytes.")
-                    continue
-
-            # If it's text, send it
-            if part.text:
-                message = {"mime_type": "text/plain", "data": part.text}
-                await websocket.send_text(json.dumps(message))
-                print(f"[AGENT TO CLIENT]: text/plain: {message}")
 
 
 async def client_to_agent_messaging(
@@ -140,15 +144,14 @@ async def client_to_agent_messaging(
         message = json.loads(message_json)
         mime_type = message["mime_type"]
         data = message["data"]
+        role = message.get("role", "user")  # Default to 'user' if role is not provided
 
         # Send the message to the agent
         if mime_type == "text/plain":
             # Send a text message
-            content = types.Content(
-                role="user", parts=[types.Part.from_text(text=data)]
-            )
+            content = types.Content(role=role, parts=[types.Part.from_text(text=data)])
             live_request_queue.send_content(content=content)
-            print(f"[CLIENT TO AGENT]: {data}")
+            print(f"[CLIENT TO AGENT PRINT]: {data}")
         elif mime_type == "audio/pcm":
             # Send audio data
             decoded_data = base64.b64decode(data)

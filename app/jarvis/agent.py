@@ -127,8 +127,7 @@ root_agent = Agent(
     
     Important:
     - Be super concise in your responses and only return the information requested (not extra information).
-    - When you get a response from a tool, use the information to answer the question but make sure you 
-        NEVER talk about computer specific parts such as keys of a dictionary.
+    - Never show the raw response from a tool. Instead, use the information to answer the question.
 
     """,
     tools=[

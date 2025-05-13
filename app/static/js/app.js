@@ -22,7 +22,6 @@ const typingIndicator = document.getElementById("typing-indicator");
 const startAudioButton = document.getElementById("startAudioButton");
 const stopAudioButton = document.getElementById("stopAudioButton");
 const recordingContainer = document.getElementById("recording-container");
-let currentMessageId = null;
 
 // WebSocket handlers
 function connectWebsocket() {
@@ -48,78 +47,76 @@ function connectWebsocket() {
     const message_from_server = JSON.parse(event.data);
     console.log("[AGENT TO CLIENT] ", message_from_server);
 
-    // Show typing indicator when response starts
-    if (!currentMessageId && !message_from_server.turn_complete) {
+    // Show typing indicator for first message in a response sequence,
+    // but not for turn_complete messages
+    if (
+      !message_from_server.turn_complete &&
+      (message_from_server.mime_type === "text/plain" ||
+        message_from_server.mime_type === "audio/pcm")
+    ) {
       typingIndicator.classList.add("visible");
     }
 
     // Check if the turn is complete
-    // if turn complete, add new message
     if (
       message_from_server.turn_complete &&
-      message_from_server.turn_complete == true
+      message_from_server.turn_complete === true
     ) {
+      // Reset currentMessageId to ensure the next message gets a new element
       currentMessageId = null;
       typingIndicator.classList.remove("visible");
       return;
     }
 
-    // If it's audio, play it (but don't remove the text that might be displayed)
-    if (message_from_server.mime_type == "audio/pcm" && audioPlayerNode) {
+    // If it's audio, play it
+    if (message_from_server.mime_type === "audio/pcm" && audioPlayerNode) {
       audioPlayerNode.port.postMessage(base64ToArray(message_from_server.data));
 
-      // If we have audio and a text message already being displayed, mark it with an audio icon if not already done
-      if (currentMessageId && is_audio) {
-        const message = document.getElementById(currentMessageId);
-        if (message && !message.querySelector(".audio-icon")) {
-          // Add audio icon to the message
+      // Mark the last model message with audio icon if it doesn't have one
+      const modelMessages = Array.from(
+        messagesDiv.querySelectorAll(".agent-message")
+      );
+      if (modelMessages.length > 0) {
+        const lastModelMessage = modelMessages[modelMessages.length - 1];
+        if (!lastModelMessage.querySelector(".audio-icon") && is_audio) {
           const audioIcon = document.createElement("span");
           audioIcon.className = "audio-icon";
-          message.prepend(audioIcon);
+          lastModelMessage.prepend(audioIcon);
         }
       }
     }
 
-    // If it's a text, print it
-    if (message_from_server.mime_type == "text/plain") {
-      // Hide typing indicator when we start receiving text
+    // Handle text messages
+    if (message_from_server.mime_type === "text/plain") {
+      // Hide typing indicator
       typingIndicator.classList.remove("visible");
 
-      // add a new message for a new turn
-      if (currentMessageId == null) {
-        currentMessageId = Math.random().toString(36).substring(7);
-        const message = document.createElement("p");
-        message.id = currentMessageId;
-        message.className = "agent-message";
+      // Always create a new message element for each text message
+      const messageId = Math.random().toString(36).substring(7);
+      const messageElem = document.createElement("p");
+      messageElem.id = messageId;
 
-        // If audio is enabled, add the audio icon
-        if (is_audio) {
-          const audioIcon = document.createElement("span");
-          audioIcon.className = "audio-icon";
-          message.appendChild(audioIcon);
-        }
+      // Set class based on role
+      const role = message_from_server.role || "model";
+      messageElem.className =
+        role === "user" ? "user-message" : "agent-message";
 
-        // Append the message element to the messagesDiv
-        messagesDiv.appendChild(message);
+      // Add audio icon for model messages if audio is enabled
+      if (is_audio && role === "model") {
+        const audioIcon = document.createElement("span");
+        audioIcon.className = "audio-icon";
+        messageElem.appendChild(audioIcon);
       }
 
-      // Add message text to the existing message element
-      const message = document.getElementById(currentMessageId);
-
-      // Get the text node or create one if it doesn't exist
-      let textNode = Array.from(message.childNodes).find(
-        (node) => node.nodeType === Node.TEXT_NODE
+      // Add the text content
+      messageElem.appendChild(
+        document.createTextNode(message_from_server.data)
       );
-      if (!textNode) {
-        textNode = document.createTextNode("");
-        message.appendChild(textNode);
-      }
 
-      // Update the text
-      textNode.nodeValue =
-        (textNode.nodeValue || "") + message_from_server.data;
+      // Add the message to the DOM
+      messagesDiv.appendChild(messageElem);
 
-      // Scroll down to the bottom of the messagesDiv
+      // Scroll to the bottom
       messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
   };
@@ -164,6 +161,7 @@ function addSubmitHandler() {
       sendMessage({
         mime_type: "text/plain",
         data: message,
+        role: "user",
       });
       console.log("[CLIENT TO AGENT] " + message);
       // Scroll down to the bottom of the messagesDiv
