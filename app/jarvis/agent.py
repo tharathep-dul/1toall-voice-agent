@@ -1,5 +1,4 @@
-from datetime import datetime
-
+from anyio import get_current_task
 from google.adk.agents import Agent
 
 # from google.adk.tools import google_search  # Import the search tool
@@ -7,26 +6,9 @@ from .tools import (
     create_event,
     delete_event,
     edit_event,
+    get_current_time,
     list_events,
 )
-
-
-def get_current_time() -> dict:
-    """
-    Get the current time and date
-    """
-    now = datetime.now()
-
-    # Format date as MM-DD-YYYY
-    formatted_date = now.strftime("%m-%d-%Y")
-
-    return {
-        "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
-        "formatted_date": formatted_date,
-    }
-
-
-today = get_current_time()
 
 root_agent = Agent(
     # A unique name for the agent.
@@ -81,7 +63,7 @@ root_agent = Agent(
     - NEVER show the raw response from a tool_outputs. Instead, use the information to answer the question.
     - NEVER show ```tool_outputs...``` in your response.
 
-    Today's date is {today}.
+    Today's date is {get_current_time()}.
     """,
     tools=[
         list_events,

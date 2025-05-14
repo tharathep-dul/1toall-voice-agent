@@ -4,6 +4,7 @@
 Calendar tools for Google Calendar integration.
 """
 
+from .calendar_utils import get_current_time
 from .create_event import create_event
 from .delete_event import delete_event
 from .edit_event import edit_event
@@ -14,4 +15,5 @@ __all__ = [
     "delete_event",
     "edit_event",
     "list_events",
+    "get_current_time",
 ]

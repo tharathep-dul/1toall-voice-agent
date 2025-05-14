@@ -2,9 +2,9 @@
 Utility functions for Google Calendar integration.
 """
 
-import datetime
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 from google.auth.transport.requests import Request
@@ -70,9 +70,7 @@ def format_event_time(event_time):
     """
     if "dateTime" in event_time:
         # This is a datetime event
-        dt = datetime.datetime.fromisoformat(
-            event_time["dateTime"].replace("Z", "+00:00")
-        )
+        dt = datetime.fromisoformat(event_time["dateTime"].replace("Z", "+00:00"))
         return dt.strftime("%Y-%m-%d %I:%M %p")
     elif "date" in event_time:
         # This is an all-day event
@@ -104,8 +102,23 @@ def parse_datetime(datetime_str):
 
     for fmt in formats:
         try:
-            return datetime.datetime.strptime(datetime_str, fmt)
+            return datetime.strptime(datetime_str, fmt)
         except ValueError:
             continue
 
     return None
+
+
+def get_current_time() -> dict:
+    """
+    Get the current time and date
+    """
+    now = datetime.now()
+
+    # Format date as MM-DD-YYYY
+    formatted_date = now.strftime("%m-%d-%Y")
+
+    return {
+        "current_time": now.strftime("%Y-%m-%d %H:%M:%S"),
+        "formatted_date": formatted_date,
+    }
