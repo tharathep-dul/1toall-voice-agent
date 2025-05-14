@@ -6,7 +6,28 @@ This document explains how to set up and use the Google Calendar integration wit
 
 ### 1. Install Dependencies
 
-First, install all required Python packages using pip:
+First, create a virtual environment:
+
+```bash
+# Create a virtual environment
+python -m venv .venv
+```
+
+Activate the virtual environment:
+
+On Windows:
+```bash
+# Activate virtual environment on Windows
+.venv\Scripts\activate
+```
+
+On macOS/Linux:
+```bash
+# Activate virtual environment on macOS/Linux
+source .venv/bin/activate
+```
+
+Then, install all required Python packages using pip:
 
 ```bash
 # Install all dependencies
