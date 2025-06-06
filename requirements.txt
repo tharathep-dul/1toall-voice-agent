@@ -14,10 +14,7 @@ cryptography==44.0.3
 Deprecated==1.2.18
 docstring_parser==0.16
 fastapi==0.115.12
-google-adk==0.5.0
 google-api-core==2.24.2
-google-api-python-client==2.169.0
-google-auth==2.40.1
 google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.2
 google-cloud-aiplatform==1.92.0
@@ -29,7 +26,6 @@ google-cloud-speech==2.32.0
 google-cloud-storage==2.19.0
 google-cloud-trace==1.16.1
 google-crc32c==1.7.1
-google-genai==1.14.0
 google-resumable-media==2.7.2
 googleapis-common-protos==1.70.0
 graphviz==0.20.3

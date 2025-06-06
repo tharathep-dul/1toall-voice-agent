@@ -15,7 +15,7 @@ from google.adk.events.event import Event
 from google.adk.runners import Runner
 from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from google.genai import types
-from jarvis.agent import root_agent
+from .jarvis.agent import root_agent
 
 #
 # ADK Streaming
@@ -174,14 +174,14 @@ async def client_to_agent_messaging(
 
 app = FastAPI()
 
-STATIC_DIR = Path("static")
+STATIC_DIR = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
 @app.get("/")
 async def root():
     """Serves the index.html"""
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    return FileResponse(STATIC_DIR / "index.html")
 
 
 @app.websocket("/ws/{session_id}")

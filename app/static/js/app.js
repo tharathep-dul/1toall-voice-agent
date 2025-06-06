@@ -22,6 +22,11 @@ const connectionStatus = document.getElementById("connection-status");
 const typingIndicator = document.getElementById("typing-indicator");
 const startAudioButton = document.getElementById("startAudioButton");
 const stopAudioButton = document.getElementById("stopAudioButton");
+const voiceCircle = document.getElementById("voiceCircle");
+const statusText = document.getElementById("statusText");
+const commandText = document.getElementById("commandText");
+
+// UI elements that might not exist in new design
 const recordingContainer = document.getElementById("recording-container");
 
 // WebSocket handlers
@@ -234,7 +239,11 @@ function startAudio() {
   startAudioPlayerWorklet().then(([node, ctx]) => {
     audioPlayerNode = node;
     audioPlayerContext = ctx;
+  }).catch(error => {
+    console.error('Failed to start audio player:', error);
+    if (statusText) statusText.textContent = 'Audio player error';
   });
+  
   // Start audio input
   startAudioRecorderWorklet(audioRecorderHandler).then(
     ([node, ctx, stream]) => {
@@ -242,8 +251,30 @@ function startAudio() {
       audioRecorderContext = ctx;
       micStream = stream;
       isRecording = true;
+      
+      // Update status to show recording
+      if (statusDot) {
+        statusDot.classList.add("recording");
+      }
+      if (connectionStatus) {
+        connectionStatus.textContent = "Recording";
+      }
     }
-  );
+  ).catch(error => {
+    console.error('Failed to start audio recorder:', error);
+    if (statusText) statusText.textContent = 'Microphone error';
+    if (commandText) commandText.textContent = 'Please check microphone';
+    
+    // Reset UI state
+    if (voiceCircle) voiceCircle.classList.remove("listening");
+    if (startAudioButton) {
+      startAudioButton.disabled = false;
+      startAudioButton.classList.remove("hidden");
+    }
+    if (stopAudioButton) {
+      stopAudioButton.classList.add("hidden");
+    }
+  });
 }
 
 // Stop audio recording
@@ -266,46 +297,157 @@ function stopAudio() {
   }
 
   isRecording = false;
+  
+  // Update status indicators
+  if (statusDot) {
+    statusDot.classList.remove("recording");
+  }
+  if (connectionStatus) {
+    connectionStatus.textContent = websocket && websocket.readyState === WebSocket.OPEN ? "Connected" : "Connecting...";
+  }
+}
+
+// Function to request microphone permission and start audio
+async function requestMicrophonePermission() {
+  try {
+    // Check if we're on HTTPS or localhost
+    const isSecureContext = window.isSecureContext || 
+                           location.hostname === 'localhost' || 
+                           location.hostname === '127.0.0.1';
+    
+    if (!isSecureContext) {
+      throw new Error('Microphone access requires HTTPS or localhost');
+    }
+
+    // Request microphone permission
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Stop the test stream immediately
+    stream.getTracks().forEach(track => track.stop());
+    
+    return true;
+  } catch (error) {
+    console.error('Microphone permission denied:', error);
+    
+    // Update UI to show error
+    if (statusText) statusText.textContent = 'Microphone access denied';
+    if (commandText) commandText.textContent = 'Please allow microphone access';
+    
+    // Show alert to user
+    alert('Microphone access is required for voice features. Please:\n\n1. Allow microphone access when prompted\n2. Make sure you\'re using HTTPS or localhost\n3. Check your browser settings');
+    
+    return false;
+  }
 }
 
 // Start the audio only when the user clicked the button
 // (due to the gesture requirement for the Web Audio API)
-startAudioButton.addEventListener("click", () => {
-  startAudioButton.disabled = true;
-  startAudioButton.textContent = "Voice Enabled";
-  startAudioButton.style.display = "none";
-  stopAudioButton.style.display = "inline-block";
-  recordingContainer.style.display = "flex";
-  startAudio();
-  is_audio = true;
+if (startAudioButton) {
+  startAudioButton.addEventListener("click", async () => {
+    // Request microphone permission first
+    const hasPermission = await requestMicrophonePermission();
+    
+    if (!hasPermission) {
+      return; // Don't proceed if permission denied
+    }
 
-  // Add class to messages container to enable audio styling
-  messagesDiv.classList.add("audio-enabled");
+    startAudioButton.disabled = true;
+    startAudioButton.textContent = "Voice Enabled";
+    startAudioButton.classList.remove("primary");
+    startAudioButton.classList.add("hidden");
+    
+    if (stopAudioButton) {
+      stopAudioButton.classList.remove("hidden");
+    }
+    
+    if (recordingContainer) {
+      recordingContainer.style.display = "flex";
+    }
+    
+    // Update voice circle UI
+    if (voiceCircle) {
+      voiceCircle.classList.add("listening");
+    }
+    if (statusText) {
+      statusText.textContent = "Listening...";
+    }
+    if (commandText) {
+      commandText.textContent = "Speak now";
+    }
+    
+    startAudio();
+    is_audio = true;
 
-  connectWebsocket(); // reconnect with the audio mode
-});
+    // Add class to messages container to enable audio styling
+    if (messagesDiv) {
+      messagesDiv.classList.add("audio-enabled");
+    }
+
+    connectWebsocket(); // reconnect with the audio mode
+  });
+}
 
 // Stop audio recording when stop button is clicked
-stopAudioButton.addEventListener("click", () => {
-  stopAudio();
-  stopAudioButton.style.display = "none";
-  startAudioButton.style.display = "inline-block";
-  startAudioButton.disabled = false;
-  startAudioButton.textContent = "Enable Voice";
-  recordingContainer.style.display = "none";
+if (stopAudioButton) {
+  stopAudioButton.addEventListener("click", () => {
+    stopAudio();
+    
+    stopAudioButton.classList.add("hidden");
+    
+    if (startAudioButton) {
+      startAudioButton.classList.remove("hidden");
+      startAudioButton.disabled = false;
+      startAudioButton.textContent = "Enable Voice";
+      startAudioButton.classList.add("primary");
+    }
+    
+    if (recordingContainer) {
+      recordingContainer.style.display = "none";
+    }
+    
+    // Update voice circle UI
+    if (voiceCircle) {
+      voiceCircle.classList.remove("listening", "speaking");
+    }
+    if (statusText) {
+      statusText.textContent = "OK.";
+    }
+    if (commandText) {
+      commandText.textContent = "Tap to speak";
+    }
 
-  // Remove audio styling class
-  messagesDiv.classList.remove("audio-enabled");
+    // Remove audio styling class
+    if (messagesDiv) {
+      messagesDiv.classList.remove("audio-enabled");
+    }
 
-  // Reconnect without audio mode
-  is_audio = false;
+    // Reconnect without audio mode
+    is_audio = false;
 
-  // Only reconnect if the connection is still open
-  if (websocket && websocket.readyState === WebSocket.OPEN) {
-    websocket.close();
-    // The onclose handler will trigger reconnection
-  }
-});
+    // Only reconnect if the connection is still open
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+      websocket.close();
+      // The onclose handler will trigger reconnection
+    }
+  });
+}
+
+// Voice circle click handler (alternative to button)
+if (voiceCircle) {
+  voiceCircle.addEventListener("click", async () => {
+    if (voiceCircle.classList.contains("listening")) {
+      // Stop listening
+      if (stopAudioButton) {
+        stopAudioButton.click();
+      }
+    } else {
+      // Start listening
+      if (startAudioButton && !startAudioButton.disabled) {
+        startAudioButton.click();
+      }
+    }
+  });
+}
 
 // Audio recorder handler
 function audioRecorderHandler(pcmData) {
